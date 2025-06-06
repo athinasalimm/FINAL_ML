@@ -1,9 +1,5 @@
 import pandas as pd
 
-import pandas as pd
-
-import pandas as pd
-
 def filtrar_meses(dataset, columna_fecha, meses_a_excluir):
     dataset[columna_fecha] = pd.to_datetime(dataset[columna_fecha], errors='coerce')
     filas_originales = len(dataset)
