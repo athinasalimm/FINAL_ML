@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Predicción de Bicicletas GCBA</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    <!-- Leaflet y estilos -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        body {
+            font-family: "Segoe UI", sans-serif;
+            margin: 0;
+            padding: 0;
+            background-image: url('https://img.freepik.com/vector-premium/parque-ciudad-concepto-farolas-lugar-jardin-publico-arboles-verdes-linternas-camino-caminar-o-andar-bicicleta-banco-vista-rascacielos-fondo-ilustracion-vectorial-diseno-plano-dibujos-animados_198565-1061.jpg');
+            background-size: cover;
+            background-attachment: fixed;
+            color: #fff;
+        }
+        .container {
+            background-color: rgba(0, 0, 0, 0.65);
+            padding: 2rem;
+            max-width: 1000px;
+            margin: auto;
+            border-radius: 12px;
+        }
+        h1, h2 {
+            color: #FFD700;
+        }
+        label, select, input {
+            display: block;
+            margin: 0.5rem 0;
+        }
+        button {
+            background-color: #FF69B4;
+            color: white;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        #map {
+            height: 500px;
+            margin-top: 1rem;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚲 Predicción de Bicicletas GCBA</h1>
+
+        <h2>🔥 Mapa de calor</h2>
+        <label for="minutos-heatmap">¿Cuántos minutos en el futuro querés ver?</label>
+        <select id="minutos-heatmap">
+            <option value="5">5</option>
+            <option value="15" selected>15</option>
+            <option value="30">30</option>
+            <option value="45">45</option>
+            <option value="60">60</option>
+        </select>
+        <button onclick="cargarHeatmap()">Generar Heatmap</button>
+
+        <h2>🗺️ ¿Querés salir a andar en bici?</h2>
+        <label for="direccion">📍 Tu dirección</label>
+        <input type="text" id="direccion" placeholder="Ej: Av. Santa Fe 1200, CABA">
+        
+        <label for="minutos">⏰ ¿En cuántos minutos vas a salir?</label>
+        <select id="minutos">
+            <option value="5">5</option>
+            <option value="15" selected>15</option>
+            <option value="30">30</option>
+            <option value="45">45</option>
+            <option value="60">60</option>
+        </select>
+
+        <label for="radio">📏 ¿Cuántos km estás dispuesta/o a caminar?</label>
+        <input type="number" id="radio" step="0.1" min="0.1" max="2" value="1">
+
+        <button onclick="buscarEstaciones()">Buscar estaciones cercanas</button>
+
+        <div id="map"></div>
+    </div>
+
+    <!-- JS y Leaflet -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        let mapa = L.map('map').setView([-34.6037, -58.3816], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(mapa);
+
+        function cargarHeatmap() {
+            const minutos = document.getElementById("minutos-heatmap").value;
+            fetch('/heatmap', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({minutos: minutos})
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                mapa.setView([data.base_lat, data.base_lon], 14);
+                data.puntos.forEach(p => {
+                    L.circle([p[0], p[1]], {
+                        radius: 30,
+                        color: 'red',
+                        fillOpacity: 0.4
+                    }).addTo(mapa);
+                });
+            });
+        }
+
+        function buscarEstaciones() {
+            const direccion = document.getElementById("direccion").value;
+            const minutos = document.getElementById("minutos").value;
+            const radio = document.getElementById("radio").value;
+
+            fetch('/buscar_estaciones', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({direccion, minutos, radio})
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                mapa.setView([data.lat, data.lon], 15);
+                L.marker([data.lat, data.lon], {
+                    title: "Tu ubicación"
+                }).addTo(mapa).bindPopup("Tu ubicación").openPopup();
+
+                L.circle([data.lat, data.lon], {
+                    radius: radio * 1000,
+                    color: 'blue',
+                    fillOpacity: 0.1
+                }).addTo(mapa);
+
+                data.estaciones.forEach(est => {
+                    L.marker([est.lat, est.lon], {
+                        title: est.nombre
+                    }).addTo(mapa).bindPopup(`${est.nombre}<br>${est.bicis} bicis disponibles`);
+                });
+            });
+        }
+    </script>
+</body>
+</html>
