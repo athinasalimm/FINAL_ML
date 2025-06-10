@@ -68,14 +68,10 @@ def construir_features_por_estacion_intervalo(df_viajes, df_usuarios, mapping_zo
     ).reset_index()
 
     df_top = df.groupby(group_cols + ["id_estacion_destino"]).size().reset_index(name="frecuencia")
-    top_origenes = df_top.sort_values("frecuencia", ascending=False).groupby(group_cols).head(3)
-    top_pivot = top_origenes.groupby(group_cols).agg({
-        "id_estacion_destino": lambda x: list(x) + [np.nan]*3
-    }).reset_index()
-    top_pivot[["top_origen_1", "top_origen_2", "top_origen_3"]] = pd.DataFrame(top_pivot["id_estacion_destino"].tolist(), index=top_pivot.index)
-    top_pivot = top_pivot.drop(columns="id_estacion_destino")
+    top1 = df_top.sort_values("frecuencia", ascending=False).groupby(group_cols).first().reset_index()
+    top1 = top1.rename(columns={"id_estacion_destino": "top_origen_1"})
 
-    features = pd.merge(agg, top_pivot, on=group_cols, how="left")
+    features = pd.merge(agg, top1, on=group_cols, how="left")
     features["zona_estacion"] = features["id_estacion_origen"].map(mapping_zona)
     features = agregar_features_temporales(features)
 
