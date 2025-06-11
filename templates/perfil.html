@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<h2>🙋 Cargá tu perfil</h2>
+<p>Completá tus datos para obtener recomendaciones personalizadas:</p>
+
+<label for="direccion-usuario">📍 Dirección donde estás</label>
+<input type="text" id="direccion-usuario" placeholder="Ej: Av. Córdoba 3200, CABA">
+
+<label for="edad-usuario">🎂 Tu edad</label>
+<input type="number" id="edad-usuario" min="10" max="100" placeholder="Ej: 26">
+
+<label for="genero-usuario">🧬 Tu género</label>
+<select id="genero-usuario">
+    <option value="FEMALE">Femenino</option>
+    <option value="MALE">Masculino</option>
+    <option value="OTHER">Otro</option>
+</select>
+
+<button onclick="procesarPerfilUsuario()">Ver recomendaciones</button>
+
+<div id="resultado-perfil" style="margin-top: 1rem;"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function procesarPerfilUsuario() {
+        const direccion = document.getElementById("direccion-usuario").value;
+        const edad = document.getElementById("edad-usuario").value;
+        const genero = document.getElementById("genero-usuario").value;
+
+        fetch('/perfil_usuario', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({direccion, edad, genero})
+        })
+        .then(resp => resp.json())
+        .then(data => {
+            document.getElementById("resultado-perfil").innerHTML = `
+                <p>🚴 Estás en <strong>${data.zona}</strong>. Dentro de ${data.radio} km hay ${data.estaciones.length} estaciones activas.</p>
+                <ul>${data.estaciones.map(e => `<li>${e.nombre} - ${e.bicis} bicis</li>`).join("")}</ul>
+            `;
+        });
+    }
+</script>
+{% endblock %}

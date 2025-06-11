@@ -1,0 +1,61 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<h2>👥 Estadísticas de usuarios de Ecobici</h2>
+<label for="año-estadisticas">Elegí un año:</label>
+<select id="año-estadisticas" onchange="cargarEstadisticasUsuarios()">
+    <option value="2020">2020</option>
+    <option value="2021">2021</option>
+    <option value="2022">2022</option>
+    <option value="2023">2023</option>
+    <option value="2024" selected>2024</option>
+</select>
+<div id="graficos-usuarios" style="margin-top: 2rem;"></div>
+
+<div id="chart-container">
+    <h2>📊 Estadísticas de Usuarios</h2>
+    <p>El gráfico muestra los usuarios de ecobici que se han dado de alta en cada año.</p>
+    <canvas id="chartAltas"></canvas>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function cargarEstadisticasUsuarios() {
+        const año = document.getElementById("año-estadisticas").value;
+        fetch(`/usuarios/${año}`)
+            .then(resp => resp.json())
+            .then(data => {
+                document.getElementById("graficos-usuarios").innerHTML = data.html;
+            });
+    }
+
+    // Cargar por defecto al inicio
+    cargarEstadisticasUsuarios();
+
+    // Cargar gráfico de altas por año
+    fetch("/api/altas_por_anio")
+        .then(res => res.json())
+        .then(data => {
+            const ctx = document.getElementById("chartAltas").getContext("2d");
+            new Chart(ctx, {
+                type: "bar",
+                data: {
+                    labels: Object.keys(data),
+                    datasets: [{
+                        label: "Altas por año",
+                        data: Object.values(data),
+                        backgroundColor: "rgba(255, 215, 0, 0.7)"
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        });
+</script>
+{% endblock %}

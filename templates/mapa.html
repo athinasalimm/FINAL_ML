@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<h2>🔥 Mapa de calor</h2>
+<label for="minutos-heatmap">¿Cuántos minutos en el futuro querés ver?</label>
+<select id="minutos-heatmap">
+    <option value="5">5</option>
+    <option value="15" selected>15</option>
+    <option value="30">30</option>
+    <option value="45">45</option>
+    <option value="60">60</option>
+</select>
+<button onclick="cargarHeatmap()">Generar Heatmap</button>
+
+<div id="mapa"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let mapa = L.map('mapa').setView([-34.6037, -58.3816], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(mapa);
+
+    function cargarHeatmap() {
+        const minutos = document.getElementById("minutos-heatmap").value;
+        fetch('/heatmap', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({minutos: minutos})
+        })
+        .then(resp => resp.json())
+        .then(data => {
+            mapa.setView([data.base_lat || -34.6037, data.base_lon || -58.3816], 14);
+            data.puntos.forEach(p => {
+                L.circle([p[0], p[1]], {
+                    radius: 30,
+                    color: 'red',
+                    fillOpacity: 0.4
+                }).addTo(mapa);
+            });
+        });
+    }
+</script>
+{% endblock %}
