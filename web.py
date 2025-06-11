@@ -8,7 +8,7 @@ import os
 
 app = Flask(__name__)
 
-data_dir = r"C:\Users\Catalina\OneDrive\Documents\UDESAa\AñoIII\Machine Learning\Proyecto_Final\FINAL_ML\data\usuarios\processed"
+data_dir = r"data\usuarios\processed"
 
 def generar_estaciones_cercanas(lat, lon, radio_km):
     estaciones = []

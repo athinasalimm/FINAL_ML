@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from math import radians, cos, sin, sqrt, atan2
+from sklearn.preprocessing import StandardScaler
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     R = 6371  # km
@@ -13,29 +14,41 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     return R * c
 
 def clusterizar_estaciones(df_viajes, n_clusters=8):
-    estaciones = df_viajes[["id_estacion_destino", "lat_estacion_destino", "long_estacion_destino"]].drop_duplicates()
-    estaciones = estaciones.rename(columns={
-        "id_estacion_destino": "id_estacion", 
-        "lat_estacion_destino": "lat", 
-        "long_estacion_destino": "lon"
-    })
+        # Usar lat/lon de origen y destino para mayor variedad
+        estaciones_origen = df_viajes[["id_estacion_origen", "lat_estacion_origen", "long_estacion_origen"]].drop_duplicates()
+        estaciones_origen = estaciones_origen.rename(columns={
+            "id_estacion_origen": "id_estacion", 
+            "lat_estacion_origen": "lat", 
+            "long_estacion_origen": "lon"
+        })
+        estaciones_destino = df_viajes[["id_estacion_destino", "lat_estacion_destino", "long_estacion_destino"]].drop_duplicates()
+        estaciones_destino = estaciones_destino.rename(columns={
+            "id_estacion_destino": "id_estacion", 
+            "lat_estacion_destino": "lat", 
+            "long_estacion_destino": "lon"
+        })
+        estaciones = pd.concat([estaciones_origen, estaciones_destino]).drop_duplicates("id_estacion")
 
-    coords = estaciones[["lat", "lon"]].to_numpy()
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42).fit(coords)
-    estaciones["zona_estacion"] = kmeans.labels_
+        # Normalizar coordenadas para evitar sesgo por escala
+        coords = estaciones[["lat", "lon"]].to_numpy()
+        scaler = StandardScaler()
+        coords_scaled = scaler.fit_transform(coords)
 
-    plt.figure(figsize=(8, 6))
-    for z in range(n_clusters):
-        cluster = estaciones[estaciones["zona_estacion"] == z]
-        plt.scatter(cluster["lon"], cluster["lat"], label=f"Zona {z}", s=10)
-    plt.title("Clustering de estaciones por zona")
-    plt.xlabel("Longitud")
-    plt.ylabel("Latitud")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42).fit(coords_scaled)
+        estaciones["zona_estacion"] = kmeans.labels_
 
-    return dict(zip(estaciones["id_estacion"], estaciones["zona_estacion"]))
+        plt.figure(figsize=(8, 6))
+        for z in range(n_clusters):
+            cluster = estaciones[estaciones["zona_estacion"] == z]
+            plt.scatter(cluster["lon"], cluster["lat"], label=f"Zona {z}", s=20)
+        plt.title("Clustering de estaciones por zona (normalizado)")
+        plt.xlabel("Longitud")
+        plt.ylabel("Latitud")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+        return dict(zip(estaciones["id_estacion"], estaciones["zona_estacion"]))
 
 def agregar_intervalo_30m(df, col_fecha):
     df = df.copy()
