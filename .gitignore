@@ -1,2 +1,3 @@
 data/recorridos/raw/*.csv
 data/recorridos/processed/*.csv
+data/barrios
