@@ -12,9 +12,8 @@
 </select>
 <button onclick="cargarHeatmap()">Generar Heatmap</button>
 
-<div id="mapa"></div>
+<div id="mapa" style="height: 500px;"></div>
 {% endblock %}
-
 {% block scripts %}
 <script>
     let mapa = L.map('mapa').setView([-34.6037, -58.3816], 13);
@@ -22,24 +21,79 @@
         attribution: '&copy; OpenStreetMap contributors'
     }).addTo(mapa);
 
+    let circulos = []; // para limpiar después
+
     function cargarHeatmap() {
         const minutos = document.getElementById("minutos-heatmap").value;
+
+        // Limpia círculos anteriores
+        circulos.forEach(c => mapa.removeLayer(c));
+        circulos = [];
+
         fetch('/heatmap', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({minutos: minutos})
+            body: JSON.stringify({ minutos: minutos })
         })
         .then(resp => resp.json())
         .then(data => {
-            mapa.setView([data.base_lat || -34.6037, data.base_lon || -58.3816], 14);
-            data.puntos.forEach(p => {
-                L.circle([p[0], p[1]], {
-                    radius: 30,
-                    color: 'red',
-                    fillOpacity: 0.4
+            console.log("Puntos recibidos:", data.puntos);
+
+            // Diccionario para asignar color por barrio
+            const colores = {};
+            let colorIdx = 0;
+            const paletaPastel = [
+                "#FFB3BA", "#FFDFBA", "#FFFFBA", "#BAFFC9", "#BAE1FF", "#D5BAFF",
+                "#FFC9DE", "#FFE3BA", "#E2FFBA", "#BAFFD9", "#BADBFF", "#E4BAFF",
+                "#FFB3D1", "#FFDCB3", "#F0FFB3", "#B3FFD1", "#B3E5FF", "#DCB3FF",
+                "#FFC1B3", "#FFF4B3", "#C7FFB3", "#B3FFE7", "#B3CFFF", "#F6B3FF",
+                "#FFB3EC", "#FFEAB3", "#DBFFB3", "#B3FFF4", "#B3C3FF", "#FFB3FF",
+                "#F4B3FF", "#FFD6B3", "#EDFFB3", "#B3FFF1", "#B3BFFF", "#FFB3D6",
+                "#FFB3C1", "#FFFEB3", "#D1FFB3", "#B3FFF7", "#B3B3FF", "#FFB3E4",
+                "#FFB3AA", "#FFFFC2", "#C2FFB3", "#B3FAFF", "#D2B3FF", "#FFB3F4"
+                ];
+
+            const paleta = paletaPastel;
+            
+            console.log("Respuesta cruda:", data);
+            data.puntos.forEach((p, i) => {
+                const [lat, lon, barrio] = p;
+
+                // Validación de tipos
+                if (typeof lat !== 'number' || typeof lon !== 'number' || !barrio) {
+                    console.warn(`❌ Punto inválido en índice ${i}:`, p);
+                    return;
+                }
+
+                console.log(`✅ Dibujando: ${barrio} en (${lat}, ${lon})`);
+
+                if (!colores[barrio]) {
+                    colores[barrio] = paleta[colorIdx % paleta.length];
+                    colorIdx++;
+                }
+                const color = colores[barrio];
+
+                const circle = L.circle([lat, lon], {
+                    radius: 200,
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.5
                 }).addTo(mapa);
+
+                circle.bindPopup(`<strong>${barrio}</strong>`);
+                circulos.push(circle);
             });
+
+            if (data.base_lat && data.base_lon) {
+                mapa.setView([data.base_lat, data.base_lon], 13);
+            }
+
+            if (data.puntos.length > 0) {
+                const [lat, lon] = data.puntos[0];
+                mapa.setView([lat, lon], 13);
+            }
         });
+
     }
 </script>
 {% endblock %}

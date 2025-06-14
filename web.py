@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 import random
@@ -133,12 +133,23 @@ def buscar_estaciones():
 @app.route("/heatmap", methods=["POST"])
 def heatmap():
     data = request.get_json()
-    minutos = int(data.get("minutos", 10))
-    puntos = [[-34.60 + random.uniform(-0.01, 0.01), -58.38 + random.uniform(-0.01, 0.01)] for _ in range(30)]
+    minutos = int(data.get("minutos", 10))  # podés usar esto luego si hacés predicciones por tiempo
+
+    # Cargar dataset
+    df = pd.read_csv(r"C:\Users\Catalina\OneDrive\Documents\UDESAa\AñoIII\Machine Learning\Proyecto_Final\FINAL_ML\data\estaciones_con_barrios.csv")  # cambiá si está en otra ruta
+
+    # Convertir a lista de puntos: lat, lon, barrio
+    df = df.dropna(subset=["lat", "lon", "barrio"])
+    puntos = df[["lat", "lon", "barrio"]].values.tolist()
+
+    # Coordenadas para centrar el mapa
+    base_lat = df["lat"].mean()
+    base_lon = df["lon"].mean()
+
     return jsonify({
-        "base_lat": -34.60,
-        "base_lon": -58.38,
-        "puntos": puntos
+        "puntos": puntos,
+        "base_lat": base_lat,
+        "base_lon": base_lon
     })
 
 @app.route("/perfil_usuario", methods=["POST"])
