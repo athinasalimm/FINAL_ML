@@ -1,5 +1,4 @@
 data/recorridos/raw/*.csv
 data/recorridos/processed/*.csv
 data/barrios
-new_data
 data/modelado
