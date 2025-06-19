@@ -58,7 +58,7 @@ def agregar_estacion_del_anio(df):
     df['estacion_del_anio'] = df['fecha_intervalo'].apply(calcular_estacion_del_anio)
     return df
 
-def clusterizar_barrios(df_estaciones, k=8):
+def clusterizar_barrios(df_estaciones, k=15):
     df_centros = df_estaciones.groupby('barrio')[['lat', 'lon']].mean().reset_index()
     kmeans = KMeans(n_clusters=k, random_state=42).fit(df_centros[['lat', 'lon']])
     df_centros['zona_cluster'] = kmeans.labels_
