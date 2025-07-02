@@ -5,8 +5,21 @@ import random
 import pandas as pd
 import plotly.express as px
 import os
+import geopandas as gpd
+from shapely.geometry import Point
+
+
 
 app = Flask(__name__)
+
+barrios = gpd.read_file("data/barrios/barrios.geojson")
+def obtener_barrio_desde_geojson(lat, lon):
+    punto_usuario = Point(lon, lat)  # Ojo que Point lleva (lon, lat)
+    barrio_usuario = barrios[barrios.contains(punto_usuario)]
+    if not barrio_usuario.empty:
+        return barrio_usuario.iloc[0]["nombre"]  # O el nombre exacto que tenga la columna
+    return None
+
 
 data_dir = r"data\usuarios\processed"
 
@@ -29,7 +42,7 @@ def cargar_datos_usuario(anio):
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return "¡Hola mundo desde Render!"
 
 @app.route("/mapa")
 def mapa():
@@ -133,65 +146,36 @@ def buscar_estaciones():
 @app.route("/heatmap", methods=["POST"])
 def heatmap():
     data = request.get_json()
-    minutos = int(data.get("minutos", 10))  # podés usar esto luego si hacés predicciones por tiempo
+    minutos = int(data.get("minutos", 10))  # usás esto para predicción futura
 
-    # Cargar dataset
-    df = pd.read_csv(r"C:\Users\Catalina\OneDrive\Documents\UDESAa\AñoIII\Machine Learning\Proyecto_Final\FINAL_ML\data\estaciones_con_barrios.csv")  # cambiá si está en otra ruta
-
-    # Convertir a lista de puntos: lat, lon, barrio
-    df = df.dropna(subset=["lat", "lon", "barrio"])
+    # Estaciones
+    df = pd.read_csv("data/estaciones_con_barrios.csv").dropna(subset=["lat", "lon", "barrio"])
     puntos = df[["lat", "lon", "barrio"]].values.tolist()
 
-    # Coordenadas para centrar el mapa
+    # Centro del mapa
     base_lat = df["lat"].mean()
     base_lon = df["lon"].mean()
+
+    # Ciclovías
+    ciclovias = gpd.read_file("data/barrios/ciclovias.json")
+    ciclovias = ciclovias.to_crs("EPSG:4326")  # asegurarse de estar en lat/lon
+
+    # Extraer coordenadas de las líneas
+    lineas = []
+    for geom in ciclovias.geometry:
+        if geom.geom_type == "LineString":
+            coords = list(geom.coords)
+            lineas.append(coords)
+        elif geom.geom_type == "MultiLineString":
+            for line in geom.geoms:
+                coords = list(line.coords)
+                lineas.append(coords)
 
     return jsonify({
         "puntos": puntos,
         "base_lat": base_lat,
-        "base_lon": base_lon
-    })
-
-@app.route("/perfil_usuario", methods=["POST"])
-def perfil_usuario():
-    data = request.get_json()
-    direccion = data.get("direccion", "")
-    edad = data.get("edad", None)
-    genero = data.get("genero", None)
-
-    estaciones = [
-        {"nombre": "Estación 1", "lat": -34.599, "lon": -58.381, "bicis": 3},
-        {"nombre": "Estación 2", "lat": -34.603, "lon": -58.385, "bicis": 5},
-        {"nombre": "Estación 3", "lat": -34.609, "lon": -58.377, "bicis": 2},
-    ]
-
-    geo = Nominatim(user_agent="ecobici-app")
-    ubicacion = geo.geocode(direccion)
-    if not ubicacion:
-        return jsonify({"error": "Dirección no encontrada"}), 404
-
-    user_coord = (ubicacion.latitude, ubicacion.longitude)
-
-    estaciones_cercanas = []
-    for est in estaciones:
-        est_coord = (est["lat"], est["lon"])
-        dist = geodesic(user_coord, est_coord).km
-        if dist <= 1.5:
-            estaciones_cercanas.append(est)
-
-    zona = "zona céntrica" if user_coord[0] < -34.60 else "zona norte"
-
-    return jsonify({
-        "zona": zona,
-        "lat": ubicacion.latitude,
-        "lon": ubicacion.longitude,
-        "radio": 1.5,
-        "estaciones": estaciones_cercanas,
-        "perfil": {
-            "edad": edad,
-            "genero": genero,
-            "direccion": direccion
-        }
+        "base_lon": base_lon,
+        "ciclovias": lineas
     })
 
 @app.route("/grafico_edades_por_anio")
@@ -230,5 +214,93 @@ def api_estaciones():
     estaciones = generar_estaciones_cercanas(-34.6, -58.38, 2)
     return jsonify({"estaciones": estaciones})
 
-if __name__ == "__main__":
-    app.run(debug=True)
+@app.route("/api/estaciones_cercanas_a_ubicacion", methods=["POST"])
+def estaciones_cercanas_a_ubicacion():
+    data = request.get_json()
+    direccion = data.get("direccion", "")
+
+    # Geocodificar la dirección
+    geo = Nominatim(user_agent="estaciones-proximas")
+    ubicacion = geo.geocode(direccion)
+
+    if not ubicacion:
+        return jsonify({"error": "Dirección no encontrada"}), 404
+
+    lat_usuario, lon_usuario = ubicacion.latitude, ubicacion.longitude
+    user_coord = (lat_usuario, lon_usuario)
+
+    # Cargar atributos de estaciones
+    path_atributos = r"data/new_data/processed/atributos_estaciones.csv"
+    df = pd.read_csv(path_atributos)
+
+    # Cargar coordenadas de estaciones desde otro archivo, si las necesitás
+    # Supongamos que tenés un CSV con columnas: id_estacion_origen, lat, lon
+    path_coords = r"data/estaciones_con_barrios.csv"
+    df_coords = pd.read_csv(path_coords)[["id_estacion_origen", "lat", "lon"]]
+    df_full = pd.merge(df, df_coords, on="id_estacion_origen", how="inner")
+
+    # Calcular distancia a cada estación
+    df_full["distancia_a_usuario"] = df_full.apply(
+        lambda row: geodesic((row["lat"], row["lon"]), user_coord).meters,
+        axis=1
+    )
+
+    # Filtrar las que están a menos de 200 metros
+    estaciones_cercanas = df_full[df_full["distancia_a_usuario"] <= 200]
+
+    return jsonify({
+        "cantidad_estaciones_cercanas": int(len(estaciones_cercanas)),
+        "estaciones": estaciones_cercanas[["id_estacion_origen", "distancia_a_usuario", "dist_ciclovia_m", "ciclo_len_200m"]].to_dict(orient="records"),
+        "lat": lat_usuario,
+        "lon": lon_usuario
+    })
+
+
+@app.route("/perfil_usuario", methods=["POST"])
+def perfil_usuario():
+    data = request.get_json()
+    direccion = data.get("direccion", "")
+    edad = data.get("edad", None)
+    genero = data.get("genero", None)
+
+    geo = Nominatim(user_agent="ecobici-app")
+    ubicacion = geo.geocode(direccion)
+    if not ubicacion:
+        return jsonify({"error": "Dirección no encontrada"}), 404
+
+    lat, lon = ubicacion.latitude, ubicacion.longitude
+    barrio = obtener_barrio_desde_geojson(lat, lon)
+
+    df_estaciones = pd.read_csv("data/new_data/processed/atributos_estaciones.csv")
+    df_coords = pd.read_csv("data/estaciones_con_barrios.csv")[["id_estacion", "lat", "lon"]]
+    df = pd.merge(df_estaciones, df_coords, left_on="id_estacion_origen", right_on="id_estacion")
+
+    def distancia_km(row):
+        return geodesic((lat, lon), (row["lat"], row["lon"])).km
+
+    df["distancia_km"] = df.apply(distancia_km, axis=1)
+    estaciones_cercanas = df[df["distancia_km"] <= 0.2].copy()  # hasta 200 m
+
+    # Asegurarse que lat y lon estén en la respuesta
+    estaciones_cercanas = estaciones_cercanas[["id_estacion_origen", "lat", "lon", "distancia_km", "ciclo_len_200m"]]
+
+    return jsonify({
+        "lat": lat,
+        "lon": lon,
+        "barrio": barrio,
+        "radio": 0.2,
+        "cantidad_estaciones": len(estaciones_cercanas),
+        "estaciones": estaciones_cercanas.to_dict(orient="records"),
+        "perfil": {
+            "edad": edad,
+            "genero": genero,
+            "direccion": direccion
+        }
+    })
+
+
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))  # usa puerto 5000 si no está definido PORT
+    app.run(host='0.0.0.0', port=port)

@@ -51,38 +51,49 @@
                 "#F4B3FF", "#FFD6B3", "#EDFFB3", "#B3FFF1", "#B3BFFF", "#FFB3D6",
                 "#FFB3C1", "#FFFEB3", "#D1FFB3", "#B3FFF7", "#B3B3FF", "#FFB3E4",
                 "#FFB3AA", "#FFFFC2", "#C2FFB3", "#B3FAFF", "#D2B3FF", "#FFB3F4"
-                ];
+            ];
 
             const paleta = paletaPastel;
-            
-            console.log("Respuesta cruda:", data);
-            data.puntos.forEach((p, i) => {
-                const [lat, lon, barrio] = p;
 
-                // Validación de tipos
-                if (typeof lat !== 'number' || typeof lon !== 'number' || !barrio) {
-                    console.warn(`❌ Punto inválido en índice ${i}:`, p);
-                    return;
-                }
+    data.puntos.forEach((p, i) => {
+        const [lat, lon, barrio] = p;
 
-                console.log(`✅ Dibujando: ${barrio} en (${lat}, ${lon})`);
+        if (typeof lat !== 'number' || typeof lon !== 'number' || !barrio) {
+            console.warn(`❌ Punto inválido en índice ${i}:`, p);
+            return;
+        }
 
-                if (!colores[barrio]) {
-                    colores[barrio] = paleta[colorIdx % paleta.length];
-                    colorIdx++;
-                }
-                const color = colores[barrio];
+        if (!colores[barrio]) {
+            colores[barrio] = paleta[colorIdx % paleta.length];
+            colorIdx++;
+        }
+        const color = colores[barrio];
 
-                const circle = L.circle([lat, lon], {
-                    radius: 200,
-                    color: color,
-                    fillColor: color,
-                    fillOpacity: 0.5
-                }).addTo(mapa);
+        const circle = L.circle([lat, lon], {
+            radius: 150,
+            color: "black",        // Borde negro
+            weight: 1.5,           // Grosor del borde
+            fillColor: color,
+            fillOpacity: 0.9
+        }).addTo(mapa);
 
-                circle.bindPopup(`<strong>${barrio}</strong>`);
-                circulos.push(circle);
-            });
+        circle.bindPopup(`<strong>${barrio}</strong>`);
+        circulos.push(circle);
+    });
+
+
+
+            // ✅ Dibujar ciclovías
+            if (data.ciclovias && Array.isArray(data.ciclovias)) {
+                data.ciclovias.forEach((linea, idx) => {
+                    const latlngs = linea.map(coord => [coord[1], coord[0]]);
+                    const polyline = L.polyline(latlngs, {
+                        color: "green",
+                        weight: 3,
+                        opacity: 0.7
+                    }).addTo(mapa);
+                });
+            }
 
             if (data.base_lat && data.base_lon) {
                 mapa.setView([data.base_lat, data.base_lon], 13);
@@ -93,7 +104,6 @@
                 mapa.setView([lat, lon], 13);
             }
         });
-
     }
 </script>
 {% endblock %}
