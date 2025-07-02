@@ -42,7 +42,7 @@ def cargar_datos_usuario(anio):
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return "¡Hola mundo desde Render!"
 
 @app.route("/mapa")
 def mapa():
@@ -300,5 +300,7 @@ def perfil_usuario():
 
 
 
-if __name__ == "__main__":
-    app.run(debug=True)
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))  # usa puerto 5000 si no está definido PORT
+    app.run(host='0.0.0.0', port=port)
