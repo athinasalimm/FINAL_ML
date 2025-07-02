@@ -1,5 +1,10 @@
 import pandas as pd
 import numpy as np
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point
+import os
+
 
 def filtrar_meses(dataset, columna_fecha, meses_a_excluir):
     dataset[columna_fecha] = pd.to_datetime(dataset[columna_fecha], errors='coerce')
@@ -10,7 +15,6 @@ def filtrar_meses(dataset, columna_fecha, meses_a_excluir):
 
 def verificar_columnas_y_tipos(archivos, archivo_referencia=None):
     info_archivos = {}
-
     for archivo in archivos:
         df = pd.read_csv(archivo)
         columnas = df.columns.tolist()
@@ -19,23 +23,19 @@ def verificar_columnas_y_tipos(archivos, archivo_referencia=None):
             'columnas': columnas,
             'tipos': tipos
         }
-
     if archivo_referencia is None:
         archivo_referencia = archivos[-1]
     columnas_ref = info_archivos[archivo_referencia]['columnas']
     tipos_ref = info_archivos[archivo_referencia]['tipos']
-
     print(f"\nUsando '{archivo_referencia}' como referencia.\n")
-
     for archivo in archivos:
         print(f"Verificando: {archivo}")
-
         columnas_actual = info_archivos[archivo]['columnas']
         if columnas_actual != columnas_ref:
-            print("❌ Columnas diferentes.")
+            print("Columnas diferentes.")
             print("Diferencias:", set(columnas_ref).symmetric_difference(columnas_actual))
         else:
-            print("✅ Columnas iguales.")
+            print("Columnas iguales.")
 
         tipos_actual = info_archivos[archivo]['tipos']
         diferencias_tipos = {
@@ -43,13 +43,12 @@ def verificar_columnas_y_tipos(archivos, archivo_referencia=None):
             for col in columnas_ref
             if col in tipos_actual and tipos_actual[col] != tipos_ref[col]
         }
-
         if diferencias_tipos:
-            print("❌ Tipos diferentes en algunas columnas:")
+            print("Tipos diferentes en algunas columnas:")
             for col, (tipo_act, tipo_ref) in diferencias_tipos.items():
                 print(f" - {col}: {tipo_act} (vs {tipo_ref})")
         else:
-            print("✅ Tipos de datos iguales.")
+            print("Tipos de datos iguales.")
         print("-" * 40)
 
 def estandarizar_nombres_columnas(archivos):
@@ -70,50 +69,34 @@ def estandarizar_nombres_columnas(archivos):
 
 def limpieza_202x(df):
     df = df.copy()
-
-    # IDs
     for col in ["id_recorrido", "id_estacion_origen", "id_estacion_destino", "id_usuario"]:
         df[col] = df[col].astype(str).str.replace("BAEcobici", "", regex=False)
         df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    # Duración
     df["duracion_recorrido"] = df["duracion_recorrido"].astype(str).str.replace(",", "", regex=False)
     df["duracion_recorrido"] = pd.to_numeric(df["duracion_recorrido"], errors="coerce")
-
-    # Coordenadas destino mezcladas
     for col in ["lat_estacion_destino", "long_estacion_destino"]:
         df[col] = df[col].astype(str).str.extract(r"(-?\d+\.\d+)")[0]
         df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    # Tipos explícitos
     if "id_estacion_destino" in df.columns:
         df["id_estacion_destino"] = pd.to_numeric(df["id_estacion_destino"], errors="coerce").astype("Int64")
     if "id_usuario" in df.columns:
         df["id_usuario"] = pd.to_numeric(df["id_usuario"], errors="coerce")  # queda como float64
-
     return df
 
 
 def limpieza_2023(df):
     df = df.copy()
-
     for col in ["id_recorrido", "id_estacion_origen", "id_estacion_destino", "id_usuario"]:
         df[col] = df[col].astype(str).str.replace("BAEcobici", "", regex=False)
         df[col] = pd.to_numeric(df[col], errors="coerce")
-
     df["duracion_recorrido"] = df["duracion_recorrido"].astype(str).str.replace(",", "", regex=False)
     df["duracion_recorrido"] = pd.to_numeric(df["duracion_recorrido"], errors="coerce")
-
-    # Coordenadas ya vienen bien, solo convertimos
     for col in ["lat_estacion_origen", "long_estacion_origen", "lat_estacion_destino", "long_estacion_destino"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    # Tipos explícitos
     if "id_estacion_destino" in df.columns:
         df["id_estacion_destino"] = pd.to_numeric(df["id_estacion_destino"], errors="coerce").astype("Int64")
     if "id_usuario" in df.columns:
         df["id_usuario"] = pd.to_numeric(df["id_usuario"], errors="coerce")  # float64
-
     return df
 
 
@@ -126,51 +109,6 @@ funciones = {
 
 
 
-# def verificar_consistencia_coordenadas(path_csv: str, anio: int = None):
-#     try:
-#         df = pd.read_csv(path_csv)
-#     except FileNotFoundError:
-#         print(f"⚠️ No se encontró el archivo: {path_csv}")
-#         return
-
-#     coordenadas_por_estacion = {}
-
-#     for _, row in df.iterrows():
-#         for rol in ['origen', 'destino']:
-#             id_col = f"id_estacion_{rol}"
-#             lat_col = f"lat_estacion_{rol}"
-#             lon_col = f"long_estacion_{rol}"
-
-#             est_id = row[id_col]
-#             lat = row[lat_col]
-#             lon = row[lon_col]
-
-#             if pd.notna(est_id) and pd.notna(lat) and pd.notna(lon):
-#                 if est_id not in coordenadas_por_estacion:
-#                     coordenadas_por_estacion[est_id] = {"lat": set(), "lon": set()}
-#                 coordenadas_por_estacion[est_id]["lat"].add(lat)
-#                 coordenadas_por_estacion[est_id]["lon"].add(lon)
-
-#     print(f"\n🔍 Verificando consistencia de coordenadas en {anio or path_csv}...")
-#     hay_errores = False
-#     for est_id, coords in sorted(coordenadas_por_estacion.items()):
-#         n_lat = len(coords["lat"])
-#         n_lon = len(coords["lon"])
-#         if n_lat > 1 or n_lon > 1:
-#             hay_errores = True
-#             diffs = []
-#             if n_lat > 1:
-#                 diffs.append("lat")
-#                 print(f" - Estación {est_id}: difiere en lat ({n_lat} latitudes distintas)")
-#             if n_lon > 1:
-#                 diffs.append("long")
-#                 print(f" - Estación {est_id}: difiere en long ({n_lon} longitudes distintas)")
-
-#     if not hay_errores:
-#         print("✅ Todas las estaciones tienen coordenadas consistentes.")
-
-import pandas as pd
-
 def verificar_consistencia_coordenadas(path_csv: str, anio: int = None, test: bool = False):
     if not test:
         print(f"\nVerificando consistencia de coordenadas en {anio or path_csv}...")
@@ -180,7 +118,7 @@ def verificar_consistencia_coordenadas(path_csv: str, anio: int = None, test: bo
     try:
         df = pd.read_csv(path_csv)
     except FileNotFoundError:
-        print(f"⚠️ No se encontró el archivo: {path_csv}")
+        print(f" No se encontró el archivo: {path_csv}")
         return
 
     coordenadas_por_estacion = {}
@@ -213,7 +151,7 @@ def verificar_consistencia_coordenadas(path_csv: str, anio: int = None, test: bo
                 print(f" - Estación {est_id}: difiere en long ({n_lon} longitudes distintas)")
 
     if not hay_errores:
-        print("✅ Todas las estaciones tienen coordenadas consistentes.")
+        print("Todas las estaciones tienen coordenadas consistentes.")
 
 
 
@@ -221,7 +159,7 @@ def corregir_longitudes_inconsistentes(path_csv: str):
     try:
         df = pd.read_csv(path_csv)
     except FileNotFoundError:
-        print(f"⚠️ Archivo no encontrado: {path_csv}")
+        print(f" Archivo no encontrado: {path_csv}")
         return
 
     estaciones_con_errores = set()
@@ -241,7 +179,7 @@ def corregir_longitudes_inconsistentes(path_csv: str):
             estaciones_con_errores.add(est_id)
 
     if not estaciones_con_errores:
-        print(f"✅ No se encontraron inconsistencias de longitud en {path_csv}")
+        print(f" No se encontraron inconsistencias de longitud en {path_csv}")
         return
 
     longitudes_correctas = {}
@@ -250,7 +188,7 @@ def corregir_longitudes_inconsistentes(path_csv: str):
         if not longitudes.empty:
             longitudes_correctas[est_id] = longitudes.mode().iloc[0]
         else:
-            print(f"⚠️ Estación {est_id} no aparece como origen en {path_csv}, no se corrige.")
+            print(f"Estación {est_id} no aparece como origen en {path_csv}, no se corrige.")
 
     def corregir_longitud(row):
         for rol in ["origen", "destino"]:
@@ -264,7 +202,7 @@ def corregir_longitudes_inconsistentes(path_csv: str):
 
     df = df.apply(corregir_longitud, axis=1)
     df.to_csv(path_csv, index=False)
-    print(f"✅ Longitudes corregidas automáticamente en: {path_csv}")
+    print(f"Longitudes corregidas automáticamente en: {path_csv}")
 
 
 def corregir_latitud_estacion(df: pd.DataFrame, est_id: int = 240) -> pd.DataFrame:
@@ -277,11 +215,11 @@ def corregir_latitud_estacion(df: pd.DataFrame, est_id: int = 240) -> pd.DataFra
     latitudes = df.loc[df["id_estacion_origen"] == est_id, "lat_estacion_origen"].dropna()
     
     if latitudes.empty:
-        print(f"⚠️ No se encontró la estación {est_id} como origen.")
+        print(f" No se encontró la estación {est_id} como origen.")
         return df
 
     lat_correcta = latitudes.mode().iloc[0]
-    print(f"ℹ️ Latitud de referencia para estación {est_id}: {lat_correcta}")
+    print(f"Latitud de referencia para estación {est_id}: {lat_correcta}")
 
     def corregir_lat(row):
         for rol in ["origen", "destino"]:
@@ -293,8 +231,6 @@ def corregir_latitud_estacion(df: pd.DataFrame, est_id: int = 240) -> pd.DataFra
 
     df = df.apply(corregir_lat, axis=1)
     return df
-
-import pandas as pd
 
 def procesar_recorridos_anio(ruta_csv_entrada, ruta_csv_salida, meses_a_eliminar, col_origen="fecha_origen_recorrido", col_destino="fecha_destino_recorrido"):
 
@@ -378,7 +314,7 @@ def corregir_coordenadas_con_base_2024(path_2024, archivos_a_corregir):
 
     for anio, path in archivos_a_corregir.items():
         if not os.path.exists(path):
-            print(f"⚠️ No se encontró el archivo de {anio}")
+            print(f"No se encontró el archivo de {anio}")
             continue
 
         df = pd.read_csv(path)
@@ -399,7 +335,7 @@ def corregir_coordenadas_con_base_2024(path_2024, archivos_a_corregir):
             df = df.apply(corregir_coord, axis=1)
 
         df.to_csv(path, index=False)
-        print(f"✅ Archivo actualizado y sobrescrito: {path}")
+        print(f"Archivo actualizado y sobrescrito: {path}")
 
 def corregir_estaciones_2020():
     path_2020 = "data/recorridos/processed/trips_2020_pr.csv"
@@ -417,15 +353,12 @@ def verificar_coordenadas_todos_los_anios(anios = [], test: bool = False, path_c
         verificar_consistencia_coordenadas(path_csv, test=True)
 
 
-import pandas as pd
-import os
-
 def construir_diccionario_estaciones(paths_descendentes):
     estaciones_dict = {}
 
     for path in paths_descendentes:
         if not os.path.exists(path):
-            print(f"⚠️ Archivo no encontrado: {path}")
+            print(f"Archivo no encontrado: {path}")
             continue
 
         df = pd.read_csv(path)
@@ -446,10 +379,6 @@ def construir_diccionario_estaciones(paths_descendentes):
 
     return estaciones_dict
 
-import pandas as pd
-import geopandas as gpd
-from shapely.geometry import Point
-import os
 
 def asignar_barrios_a_datasets(df_estaciones, anios=None, test=False, path_test=None, path_shapefile="data/barrios/barrios.shp"):
     """
@@ -462,34 +391,22 @@ def asignar_barrios_a_datasets(df_estaciones, anios=None, test=False, path_test=
     - path_test: path a un CSV de viajes para modo test
     - path_shapefile: ruta al archivo de polígonos de barrios
     """
-    # ========================
-    # 📍 1. Cargar shapefile de barrios
-    # ========================
     barrios_gdf = gpd.read_file(path_shapefile)
     if "nombre" in barrios_gdf.columns and "barrio" not in barrios_gdf.columns:
         barrios_gdf = barrios_gdf.rename(columns={"nombre": "barrio"})
 
-    # ========================
-    # 📍 2. Join espacial: estaciones → barrios
-    # ========================
     df_estaciones["geometry"] = df_estaciones.apply(lambda row: Point(row["lon"], row["lat"]), axis=1)
     estaciones_gdf = gpd.GeoDataFrame(df_estaciones, geometry="geometry", crs=barrios_gdf.crs)
 
     estaciones_con_barrios = gpd.sjoin(estaciones_gdf, barrios_gdf, how="left", predicate="within")
 
-    # Guardar CSV intermedio (opcional)
     estaciones_con_barrios[["id_estacion", "lat", "lon", "barrio"]].to_csv("data/estaciones_con_barrios.csv", index=False)
 
-    # Diccionario id_estacion → barrio
     mapa_barrio = estaciones_con_barrios.set_index("id_estacion")["barrio"].to_dict()
 
-    # Correcciones manuales
     mapa_barrio[111] = "PUERTO MADERO"
     mapa_barrio[541] = "PALERMO"
 
-    # ========================
-    # 📍 3. Enriquecer datasets
-    # ========================
     if test:
         if path_test is None or not os.path.exists(path_test):
             print("⚠️ Path inválido o no encontrado para test.")
@@ -515,23 +432,21 @@ def asignar_barrios_a_datasets(df_estaciones, anios=None, test=False, path_test=
         df["barrio_origen"] = df["id_estacion_origen"].map(mapa_barrio)
         df["barrio_destino"] = df["id_estacion_destino"].map(mapa_barrio)
         df.to_csv(path, index=False)
-        print(f"✅ Enriquecido con barrios: {anio}")
+        print(f" Enriquecido con barrios: {anio}")
 
 
-import pandas as pd
-import os
 
 def obtener_o_construir_df_estaciones(lista_paths, path_guardado="data/estaciones_unico.csv"):
     if os.path.exists(path_guardado):
-        print("📂 Usando df_estaciones ya guardado.")
+        print("Usando df_estaciones ya guardado.")
         return pd.read_csv(path_guardado)
 
-    print("⚙️ Construyendo df_estaciones desde archivos...")
+    print("Construyendo df_estaciones desde archivos...")
     estaciones_dict = {}
 
     for path in lista_paths:
         if not os.path.exists(path):
-            print(f"⚠️ Archivo no encontrado: {path}")
+            print(f"Archivo no encontrado: {path}")
             continue
 
         df = pd.read_csv(path)
@@ -555,10 +470,9 @@ def obtener_o_construir_df_estaciones(lista_paths, path_guardado="data/estacione
         for est_id, (lat, lon) in estaciones_dict.items()
     ])
 
-    # Guardar el CSV para futuros usos
     os.makedirs(os.path.dirname(path_guardado), exist_ok=True)
     df_estaciones.to_csv(path_guardado, index=False)
-    print(f"✅ df_estaciones guardado en {path_guardado}")
+    print(f"df_estaciones guardado en {path_guardado}")
 
     return df_estaciones
 
@@ -575,23 +489,23 @@ def analyze_barrios(path_shapefile="data/barrios/barrios.shp"):
     try:
         barrios_gdf = gpd.read_file(path_shapefile)
     except Exception as e:
-        print(f"❌ Error al leer el shapefile: {e}")
+        print(f"Error al leer el shapefile: {e}")
         return
 
     print("🧩 Columnas disponibles en el shapefile:")
     print(barrios_gdf.columns.tolist())
 
     if "nombre" not in barrios_gdf.columns:
-        print("⚠️ La columna 'nombre' no existe en el shapefile.")
+        print("La columna 'nombre' no existe en el shapefile.")
         return
 
     barrios_unicos = sorted(barrios_gdf["nombre"].dropna().unique())
     total = len(barrios_unicos)
 
-    print(f"\n📊 Cantidad de barrios únicos en el shapefile: {total}")
-    print("\n🗺️ Barrios:")
+    print(f"\nCantidad de barrios únicos en el shapefile: {total}")
+    print("\nBarrios:")
     print(barrios_unicos)
-    print(f"\n🧮 Total de barrios: {total}")
+    print(f"\nTotal de barrios: {total}")
 
 
 def analizar_presencia_estaciones(archivos, anios):
@@ -618,10 +532,10 @@ def analizar_presencia_estaciones(archivos, anios):
     tabla_presencia["Anios_presente"] = tabla_presencia[anios].apply(lambda row: sum(cell == "✓" for cell in row), axis=1)
     tabla_presencia = tabla_presencia.sort_index()
 
-    print("\n📋 Presencia de estaciones por año (por ID, ordenadas por cantidad de años presentes):")
+    print("\nPresencia de estaciones por año (por ID, ordenadas por cantidad de años presentes):")
     print(tabla_presencia)
 
-    print("\n📈 Cantidad de estaciones por año:")
+    print("\nCantidad de estaciones por año:")
     for anio in anios:
         cantidad = len(estaciones_por_anio.get(anio, set()))
         print(f"  - {anio}: {cantidad} estaciones")
@@ -630,14 +544,14 @@ def analizar_presencia_estaciones(archivos, anios):
 
 
 def mostrar_estaciones_faltantes_en_2024(estaciones_por_anio):
-    print("\n🔍 Estaciones que aparecían en años anteriores pero NO en 2024:")
+    print("\nEstaciones que aparecían en años anteriores pero NO en 2024:")
 
     estaciones_2024 = estaciones_por_anio.get(2024, set())
 
     for anio in [2020, 2021, 2022, 2023]:
         estaciones_anio = estaciones_por_anio.get(anio, set())
         solo_en_anio = sorted(estaciones_anio - estaciones_2024)
-        print(f"\n➡️ Estaciones en {anio} pero NO en 2024 ({len(solo_en_anio)}):")
+        print(f"\n Estaciones en {anio} pero NO en 2024 ({len(solo_en_anio)}):")
         print(solo_en_anio)
 
 import pandas as pd
@@ -648,9 +562,7 @@ from matplotlib.lines import Line2D
 import os
 
 def estaciones_graf():
-    # ----------------------
-    # COLORES HARDCODEADOS
-    # ----------------------
+
     colores_barrios = [
         "red", "green", "blue", "darkorange", "purple", "cyan", "magenta", "gold",
         "orchid", "tomato", "lightpink", "deepskyblue", "chartreuse", "firebrick", "sienna", "dodgerblue",
@@ -660,17 +572,11 @@ def estaciones_graf():
         "orangered", "forestgreen", "darkcyan", "violet", "palevioletred", "blueviolet", "darkslateblue", "limegreen"
     ]
 
-    # ----------------------
-    # CARGAR BARRIOS
-    # ----------------------
     barrios_gdf = gpd.read_file("data/barrios/barrios.shp").to_crs(epsg=4326)
     barrios_unicos = sorted(barrios_gdf["nombre"].unique())
     assert len(colores_barrios) == len(barrios_unicos), "La cantidad de colores no coincide con la de barrios"
     color_dict = {barrio: colores_barrios[i] for i, barrio in enumerate(barrios_unicos)}
 
-    # ----------------------
-    # CARGAR ESTACIONES DE TODOS LOS AÑOS
-    # ----------------------
     archivos = [
         "data/recorridos/processed/trips_2024_pr.csv",
         "data/recorridos/processed/trips_2023_pr.csv",
@@ -700,9 +606,7 @@ def estaciones_graf():
     df_estaciones_todas["geometry"] = df_estaciones_todas.apply(lambda row: Point(row["lon"], row["lat"]), axis=1)
     gdf_estaciones_todas = gpd.GeoDataFrame(df_estaciones_todas, geometry="geometry", crs="EPSG:4326")
 
-    # ----------------------
-    # CARGAR ESTACIONES 2024
-    # ----------------------
+
     estaciones_2024 = {}
     df_2024 = pd.read_csv("data/recorridos/processed/trips_2024_pr.csv")
     for rol in ["origen", "destino"]:
@@ -720,10 +624,6 @@ def estaciones_graf():
     ])
     df_estaciones_2024["geometry"] = df_estaciones_2024.apply(lambda row: Point(row["lon"], row["lat"]), axis=1)
     gdf_estaciones_2024 = gpd.GeoDataFrame(df_estaciones_2024, geometry="geometry", crs="EPSG:4326")
-
-    # ----------------------
-    # PLOT
-    # ----------------------
     fig, axes = plt.subplots(1, 2, figsize=(20, 12))
     ax1, ax2 = axes
 
@@ -755,19 +655,16 @@ def estaciones_graf():
     plt.tight_layout()
     plt.show()
 
-import pandas as pd
-import os
 
 def analisis_usuarios(test=False, path_test=None):
     anios_recorridos = [2020, 2021, 2022, 2023, 2024]
     anios_usuarios_nuevos = [2015, 2016, 2017, 2018, 2019]
 
-    # === 1. Usuarios de recorridos
     if test:
         if not path_test or not os.path.exists(path_test):
-            print("⚠️ Path de test inválido o no encontrado.")
+            print("Path de test inválido o no encontrado.")
             return
-        print(f"🧪 Modo test: analizando usuarios en {path_test}")
+        print(f"Modo test: analizando usuarios en {path_test}")
         df_usuarios_recorridos = pd.read_csv(path_test, usecols=["id_usuario"])
         df_usuarios_recorridos = df_usuarios_recorridos.dropna().astype({"id_usuario": int})
         df_usuarios_recorridos["año_recorrido"] = "TEST"
@@ -781,10 +678,9 @@ def analisis_usuarios(test=False, path_test=None):
                 df["año_recorrido"] = anio
                 usuarios_recorridos.append(df)
             else:
-                print(f"⚠️ No se encontró archivo de recorridos {anio}")
+                print(f"No se encontró archivo de recorridos {anio}")
         df_usuarios_recorridos = pd.concat(usuarios_recorridos, ignore_index=True)
 
-    # === 2. Usuarios registrados 2020–2024
     usuarios_registrados = []
     for anio in anios_recorridos:
         path = f"data/usuarios/processed/usuarios_ecobici_{anio}_limpio.csv"
@@ -793,16 +689,14 @@ def analisis_usuarios(test=False, path_test=None):
             df = df.dropna().astype({"ID_usuario": int})
             usuarios_registrados.append(df)
         else:
-            print(f"⚠️ No se encontró archivo de usuarios {anio}")
+            print(f" No se encontró archivo de usuarios {anio}")
     df_usuarios_registrados = pd.concat(usuarios_registrados, ignore_index=True)
     usuarios_2020_2024_set = set(df_usuarios_registrados["ID_usuario"].unique())
 
-    # === 3. Usuarios no registrados en 2020–2024
     df_no_registrados = df_usuarios_recorridos[
         ~df_usuarios_recorridos["id_usuario"].isin(usuarios_2020_2024_set)
     ].copy()
 
-    # === 4. Usuarios registrados 2015–2019
     usuarios_extra = []
     for anio in anios_usuarios_nuevos:
         path = f"data/new_data/processed/usuarios_ecobici_{anio}_limpio.csv"
@@ -814,11 +708,10 @@ def analisis_usuarios(test=False, path_test=None):
             df["año_archivo"] = anio
             usuarios_extra.append(df[["ID_usuario", "año_archivo"]])
         else:
-            print(f"⚠️ No se encontró archivo de usuarios nuevos {anio}")
+            print(f"No se encontró archivo de usuarios nuevos {anio}")
     df_usuarios_extra = pd.concat(usuarios_extra, ignore_index=True)
     usuarios_2015_2019_set = set(df_usuarios_extra["ID_usuario"].unique())
 
-    # === 5. Análisis
     if test:
         usuarios_en_test = df_no_registrados["id_usuario"].unique()
         total = len(usuarios_en_test)
@@ -843,9 +736,8 @@ def analisis_usuarios(test=False, path_test=None):
             })
 
         df_resultado = pd.DataFrame(resultados)
-        print("🔍 Usuarios de recorridos no encontrados en 2020–2024, pero sí en 2015–2019:")
+        print(" Usuarios de recorridos no encontrados en 2020–2024, pero sí en 2015–2019:")
         print(df_resultado)
-    # === 6. Filas generadas por usuarios totalmente desconocidos
     usuarios_totalmente_desconocidos = set(df_no_registrados["id_usuario"]) - usuarios_2015_2019_set
 
     df_filas_desconocidas = df_usuarios_recorridos[
@@ -853,22 +745,22 @@ def analisis_usuarios(test=False, path_test=None):
     ]
 
     if test:
-        print(f"\n📊 Filas generadas por usuarios totalmente desconocidos (ni 2015–2019 ni 2020–2024): {len(df_filas_desconocidas)}")
+        print(f"\nFilas generadas por usuarios totalmente desconocidos (ni 2015–2019 ni 2020–2024): {len(df_filas_desconocidas)}")
     else:
         conteo_filas_por_anio = (
             df_filas_desconocidas.groupby("año_recorrido")
             .size()
             .reset_index(name="filas_totales_usuarios_desconocidos")
         )
-        print("\n📊 Filas generadas por usuarios que no aparecen en ningún archivo (ni 2015–2019 ni 2020–2024):")
+        print("\n Filas generadas por usuarios que no aparecen en ningún archivo (ni 2015–2019 ni 2020–2024):")
         print(conteo_filas_por_anio)
 
 
 def preprocesamiento_completo(test=False, path_test=None):
     if test:
-        print("🧪 Preprocesamiento en modo TEST")
+        print(" Preprocesamiento en modo TEST")
         if not path_test or not os.path.exists(path_test):
-            raise FileNotFoundError("❌ Debés especificar un `path_test` válido.")
+            raise FileNotFoundError(" Debés especificar un `path_test` válido.")
 
         verificar_coordenadas_todos_los_anios(test=True, path_csv=path_test)
         df_estaciones = obtener_o_construir_df_estaciones([])  # no necesita archivos si ya existe
@@ -876,7 +768,7 @@ def preprocesamiento_completo(test=False, path_test=None):
         analisis_usuarios(test=True, path_test=path_test)
 
     else:
-        print("🧱 Preprocesamiento en modo TRAIN (años 2020–2024)")
+        print(" Preprocesamiento en modo TRAIN (años 2020–2024)")
 
         ruta_entrada = "data/recorridos/raw/trips_2024.csv"
         ruta_salida = "data/recorridos/processed/trips_2024_pr.csv"
@@ -917,4 +809,4 @@ def preprocesamiento_completo(test=False, path_test=None):
         estaciones_graf()
         analisis_usuarios()
 
-    print("✅ Preprocesamiento completo.")
+    print(" Preprocesamiento completo.")
