@@ -125,8 +125,8 @@ def construir_dataset_modelado_v2(df_viajes, df_usuarios, df_estaciones, test = 
     estaciones_cercanas = contar_estaciones_cercanas(df_estaciones)
     df['cantidad_estaciones_cercanas_destino'] = df['id_estacion_destino'].map(estaciones_cercanas)
     df['cantidad_estaciones_cercanas_origen'] = df['id_estacion_origen'].map(estaciones_cercanas)
-    agg = df.groupby(['id_estacion_origen', 'fecha_intervalo']).size().reset_index(name='N_arribos_intervalo')
-    df = df.merge(agg, on=['id_estacion_origen', 'fecha_intervalo'], how='left')
+    agg = df.groupby(['id_estacion_destino', 'fecha_intervalo']).size().reset_index(name='N_arribos_intervalo')
+    df = df.merge(agg, on=['id_estacion_destino', 'fecha_intervalo'], how='left')
     agg2 = df.groupby(['id_estacion_origen', 'fecha_intervalo']).size().reset_index(name='N_salidas_intervalo')
     df = df.merge(agg2, on=['id_estacion_origen', 'fecha_intervalo'], how='left')
     columnas_a_eliminar = [
