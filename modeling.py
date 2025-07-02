@@ -408,24 +408,27 @@ def transformar_a_dataset_agrupado(path_parquet: str, output_path: str = "data/m
     df_agrupado = df_agrupado.sort_values(["id_estacion_origen", "fecha_intervalo"]).copy()
 
     for col in columnas_mean:
-        # Calcular el promedio real por estación e intervalo
-        mean_col = df.groupby(["id_estacion_origen", "fecha_intervalo"])[col].mean().reset_index(name=f"{col}_mean_temp")
+        df_temp = (
+            df.groupby(["id_estacion_origen", "fecha_intervalo"])[col]
+            .mean()
+            .reset_index()
+            .sort_values(["id_estacion_origen", "fecha_intervalo"])
+        )
 
-        # Mergearlo al df_agrupado
-        df_agrupado = df_agrupado.merge(mean_col, on=["id_estacion_origen", "fecha_intervalo"], how="left")
+        for lag in [1, 2, 3]:
+            df_temp[f"{col}_anterior_{lag}"] = df_temp.groupby("id_estacion_origen")[col].shift(lag)
 
-        temp_col = f"{col}_mean_temp"
-
-        # Calcular sin leakage
-        df_agrupado[f"{col}_anterior_1"] = df_agrupado.groupby("id_estacion_origen")[temp_col].shift(1)
-        df_agrupado[f"{col}_anterior_2"] = df_agrupado.groupby("id_estacion_origen")[temp_col].shift(2)
-        df_agrupado[f"{col}_anterior_3"] = df_agrupado.groupby("id_estacion_origen")[temp_col].shift(3)
-        df_agrupado[f"{col}_rolling7"] = (
-            df_agrupado.groupby("id_estacion_origen")[temp_col]
+        df_temp[f"{col}_rolling7"] = (
+            df_temp.groupby("id_estacion_origen")[col]
             .transform(lambda x: x.shift(1).rolling(window=7, min_periods=1).mean())
         )
 
-        df_agrupado.drop(columns=[temp_col], inplace=True)
+        df_temp = df_temp.drop(columns=[col])
+        df_agrupado = df_agrupado.merge(df_temp, on=["id_estacion_origen", "fecha_intervalo"], how="left")
+
+
+        print(f"✅ Calculados los lags y rolling para '{col}' sin leakage.")
+        del df_temp  # liberar memoria si trabajás con archivos grandes
 
     for lag in [1, 2, 3]:
         df_agrupado[f"arribos_lag{lag}"] = (
