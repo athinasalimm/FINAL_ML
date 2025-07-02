@@ -397,15 +397,35 @@ def transformar_a_dataset_agrupado(path_parquet: str, output_path: str = "data/m
         "dia_semana": "first",
         "hora_intervalo": "first",
         "estacion_del_anio": "first",
-        "edad_usuario": "mean",
-        "usuario_registrado": "mean",
-        "genero_FEMALE": "mean",
-        "genero_MALE": "mean",
-        "genero_OTHER": "mean",
-        "modelo_bicicleta": "mean"
     }).reset_index()
 
+    columnas_mean = [
+        "edad_usuario", "usuario_registrado",
+        "genero_FEMALE", "genero_MALE", "genero_OTHER",
+        "modelo_bicicleta"
+    ]
+
     df_agrupado = df_agrupado.sort_values(["id_estacion_origen", "fecha_intervalo"]).copy()
+
+    for col in columnas_mean:
+        # Calcular el promedio real por estación e intervalo
+        mean_col = df.groupby(["id_estacion_origen", "fecha_intervalo"])[col].mean().reset_index(name=f"{col}_mean_temp")
+
+        # Mergearlo al df_agrupado
+        df_agrupado = df_agrupado.merge(mean_col, on=["id_estacion_origen", "fecha_intervalo"], how="left")
+
+        temp_col = f"{col}_mean_temp"
+
+        # Calcular sin leakage
+        df_agrupado[f"{col}_anterior_1"] = df_agrupado.groupby("id_estacion_origen")[temp_col].shift(1)
+        df_agrupado[f"{col}_anterior_2"] = df_agrupado.groupby("id_estacion_origen")[temp_col].shift(2)
+        df_agrupado[f"{col}_anterior_3"] = df_agrupado.groupby("id_estacion_origen")[temp_col].shift(3)
+        df_agrupado[f"{col}_rolling7"] = (
+            df_agrupado.groupby("id_estacion_origen")[temp_col]
+            .transform(lambda x: x.shift(1).rolling(window=7, min_periods=1).mean())
+        )
+
+        df_agrupado.drop(columns=[temp_col], inplace=True)
 
     for lag in [1, 2, 3]:
         df_agrupado[f"arribos_lag{lag}"] = (
@@ -428,6 +448,21 @@ def transformar_a_dataset_agrupado(path_parquet: str, output_path: str = "data/m
     df_agrupado = df_agrupado.fillna(-1)
     df_agrupado.to_parquet(output_path, index=False)
     print(f"Dataset agrupado guardado en {output_path}")
+
+
+def agregar_temporales_a_parquet(path_input: str, path_output: str = None):
+    if path_output is None:
+        path_output = path_input 
+
+    df = pd.read_parquet(path_input)
+    df["fecha_intervalo"] = pd.to_datetime(df["fecha_intervalo"], errors="coerce")
+    df["año_intervalo"] = df["fecha_intervalo"].dt.year
+    df["mes_intervalo"] = df["fecha_intervalo"].dt.month
+    df["dia_intervalo"] = df["fecha_intervalo"].dt.day
+    df["hora_intervalo"] = df["fecha_intervalo"].dt.hour
+    df["minuto_intervalo"] = df["fecha_intervalo"].dt.minute
+    df.to_parquet(path_output, index=False)
+    return df.columns.tolist()
 
 def armar_dataset_modelado(test=False, path_test=None):
     if test:
