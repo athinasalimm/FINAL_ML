@@ -506,3 +506,43 @@ def armar_dataset_modelado(test=False, path_test=None):
         )
         print("Dataset de entrenamiento generado correctamente.")
 
+
+def agregar_cambios_y_ratio_historico(path_input: str, path_output: str = None):
+    """
+    Agrega columnas sin leakage:
+    - Tasa de cambio de arribos y salidas entre intervalos pasados
+    - Ratio de arribos/salidas del último intervalo
+    
+    Guarda el archivo con las nuevas columnas.
+    """
+    if path_output is None:
+        path_output = path_input  
+
+    df = pd.read_parquet(path_input)
+
+    columnas_necesarias = ["arribos_lag1", "arribos_lag2", "salidas_lag1", "salidas_lag2"]
+    for col in columnas_necesarias:
+        if col not in df.columns:
+            raise ValueError(f"Falta la columna requerida: {col}")
+
+    df["cambio_arribos"] = df["arribos_lag1"] - df["arribos_lag2"]
+    df["cambio_salidas"] = df["salidas_lag1"] - df["salidas_lag2"]
+
+    df.to_parquet(path_output, index=False)
+    print(f"Agregadas columnas sin leakage y guardado en: {path_output}")
+
+def ds_groups(
+    path_input: str = "data/modelado/ds_modelado_pre.parquet",
+    path_output: str = "data/modelado/ds_modelado_group.parquet"
+):
+
+    print("Transformando a dataset agrupado...")
+    transformar_a_dataset_agrupado(path_parquet=path_input, output_path=path_output)
+
+    print("Agregando columnas temporales...")
+    agregar_temporales_a_parquet(path_output)
+
+    print("Agregando cambio y ratio histórico...")
+    agregar_cambios_y_ratio_historico(path_output)
+
+    print("Dataset agrupado final listo en:", path_output)

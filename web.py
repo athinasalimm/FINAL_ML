@@ -14,10 +14,10 @@ app = Flask(__name__)
 
 barrios = gpd.read_file("data/barrios/barrios.geojson")
 def obtener_barrio_desde_geojson(lat, lon):
-    punto_usuario = Point(lon, lat)  # Ojo que Point lleva (lon, lat)
+    punto_usuario = Point(lon, lat)  
     barrio_usuario = barrios[barrios.contains(punto_usuario)]
     if not barrio_usuario.empty:
-        return barrio_usuario.iloc[0]["nombre"]  # O el nombre exacto que tenga la columna
+        return barrio_usuario.iloc[0]["nombre"] 
     return None
 
 
@@ -54,7 +54,6 @@ def perfil():
 
 @app.route("/estadisticas")
 def estadisticas():
-    # Esta es la página que muestra el select y los gráficos
     return render_template("estadisticas.html")
 
 @app.route("/usuarios/<int:anio>")
@@ -64,13 +63,11 @@ def estadisticas_usuarios(anio):
     if df is None:
         return jsonify({"html": f"<p>No hay datos para el año {anio}</p>"})
 
-    # Verificamos columnas
     required_cols = ["ID_usuario", "genero_FEMALE", "genero_MALE", "genero_OTHER", "edad_usuario"]
     for col in required_cols:
         if col not in df.columns:
             return jsonify({"html": f"<p>Falta columna '{col}' en los datos del año {anio}</p>"})
 
-    # Convertir edad_usuario a numérico para evitar errores
     df["edad_usuario"] = pd.to_numeric(df["edad_usuario"], errors='coerce')
 
     usuarios_unicos = df["ID_usuario"].nunique()
@@ -78,7 +75,6 @@ def estadisticas_usuarios(anio):
 
     edad_promedio = df["edad_usuario"].mean()
 
-    # Convertir columnas de género a numérico y llenar NaN con 0
     for col in ["genero_FEMALE", "genero_MALE", "genero_OTHER"]:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
@@ -146,21 +142,17 @@ def buscar_estaciones():
 @app.route("/heatmap", methods=["POST"])
 def heatmap():
     data = request.get_json()
-    minutos = int(data.get("minutos", 10))  # usás esto para predicción futura
+    minutos = int(data.get("minutos", 10))  
 
-    # Estaciones
     df = pd.read_csv("data/estaciones_con_barrios.csv").dropna(subset=["lat", "lon", "barrio"])
     puntos = df[["lat", "lon", "barrio"]].values.tolist()
 
-    # Centro del mapa
     base_lat = df["lat"].mean()
     base_lon = df["lon"].mean()
 
-    # Ciclovías
     ciclovias = gpd.read_file("data/barrios/ciclovias.json")
-    ciclovias = ciclovias.to_crs("EPSG:4326")  # asegurarse de estar en lat/lon
+    ciclovias = ciclovias.to_crs("EPSG:4326")  
 
-    # Extraer coordenadas de las líneas
     lineas = []
     for geom in ciclovias.geometry:
         if geom.geom_type == "LineString":
@@ -180,7 +172,6 @@ def heatmap():
 
 @app.route("/grafico_edades_por_anio")
 def grafico_edades_por_anio():
-    # Cargar datos de todos los años
     dfs = []
     for anio in range(2020, 2025):
         df = cargar_datos_usuario(anio)
@@ -193,16 +184,15 @@ def grafico_edades_por_anio():
     
     df_all = pd.concat(dfs)
 
-    # Gráfico de barras agrupadas por año y edad
     fig = px.histogram(
         df_all,
         x="edad_usuario",
         color="anio",
-        barmode="group",   # barra agrupada
+        barmode="group",
         nbins=20,
         labels={"edad_usuario": "Edad", "anio": "Año"},
         title="Distribución de edades por año",
-        color_discrete_sequence=px.colors.qualitative.Safe  # colores distintos
+        color_discrete_sequence=px.colors.qualitative.Safe 
     )
 
     html_grafico = fig.to_html(include_plotlyjs='cdn', full_html=False)
@@ -219,7 +209,6 @@ def estaciones_cercanas_a_ubicacion():
     data = request.get_json()
     direccion = data.get("direccion", "")
 
-    # Geocodificar la dirección
     geo = Nominatim(user_agent="estaciones-proximas")
     ubicacion = geo.geocode(direccion)
 
@@ -229,23 +218,18 @@ def estaciones_cercanas_a_ubicacion():
     lat_usuario, lon_usuario = ubicacion.latitude, ubicacion.longitude
     user_coord = (lat_usuario, lon_usuario)
 
-    # Cargar atributos de estaciones
     path_atributos = r"data/new_data/processed/atributos_estaciones.csv"
     df = pd.read_csv(path_atributos)
 
-    # Cargar coordenadas de estaciones desde otro archivo, si las necesitás
-    # Supongamos que tenés un CSV con columnas: id_estacion_origen, lat, lon
     path_coords = r"data/estaciones_con_barrios.csv"
     df_coords = pd.read_csv(path_coords)[["id_estacion_origen", "lat", "lon"]]
     df_full = pd.merge(df, df_coords, on="id_estacion_origen", how="inner")
 
-    # Calcular distancia a cada estación
     df_full["distancia_a_usuario"] = df_full.apply(
         lambda row: geodesic((row["lat"], row["lon"]), user_coord).meters,
         axis=1
     )
 
-    # Filtrar las que están a menos de 200 metros
     estaciones_cercanas = df_full[df_full["distancia_a_usuario"] <= 200]
 
     return jsonify({
@@ -279,9 +263,8 @@ def perfil_usuario():
         return geodesic((lat, lon), (row["lat"], row["lon"])).km
 
     df["distancia_km"] = df.apply(distancia_km, axis=1)
-    estaciones_cercanas = df[df["distancia_km"] <= 0.2].copy()  # hasta 200 m
+    estaciones_cercanas = df[df["distancia_km"] <= 0.2].copy() 
 
-    # Asegurarse que lat y lon estén en la respuesta
     estaciones_cercanas = estaciones_cercanas[["id_estacion_origen", "lat", "lon", "distancia_km", "ciclo_len_200m"]]
 
     return jsonify({
@@ -302,5 +285,5 @@ def perfil_usuario():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))  # usa puerto 5000 si no está definido PORT
+    port = int(os.environ.get('PORT', 5000))  
     app.run(host='0.0.0.0', port=port)
