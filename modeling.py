@@ -11,6 +11,9 @@ from sklearn.cluster import KMeans
 import json
 import os
 
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_score
+
 def cargar_usuarios_todos_los_anios():
     rutas = []
     for anio in range(2015, 2025):
@@ -85,7 +88,7 @@ def clusterizar_barrios(df_estaciones, k=15, output_json="data/modelado/mapa_clu
     return dict_cluster
 
 def leer_clusters(path_json="data/modelado/mapa_cluster_barrios.json"):
-    with open(path_json, "r") as f:
+    with open(path_json, "r", encoding="latin1") as f:
         dict_cluster = json.load(f)
     return dict_cluster
 
@@ -546,3 +549,58 @@ def ds_groups(
     agregar_cambios_y_ratio_historico(path_output)
 
     print("Dataset agrupado final listo en:", path_output)
+
+
+def predecir_en_test(path_test_modelado, modelos_por_finde, cols_a_excluir, nombre_modelo="XGBoost", delta_min="30min", features=None):
+    df_test = pd.read_parquet(path_test_modelado)
+    df_test.dropna(inplace=True)
+
+    es_finde_val = 0
+    modelo = modelos_por_finde[es_finde_val]
+
+    df_test = df_test[df_test["es_finde"] == es_finde_val].copy()
+    df_test["fecha_intervalo"] = pd.to_datetime(df_test["fecha_intervalo"])
+
+    # ⏰ Filtrar solo los 7 horarios del 9 de septiembre de 2024
+    horarios_clave = pd.to_datetime([
+        "2024-09-09 12:00:00",
+        "2024-09-09 13:00:00",
+        "2024-09-09 14:00:00",
+        "2024-09-09 15:00:00",
+        "2024-09-09 16:00:00",
+        "2024-09-09 17:00:00",
+        "2024-09-09 18:00:00"
+    ])
+    df_test = df_test[df_test["fecha_intervalo"].isin(horarios_clave)]
+
+    if df_test.empty:
+        print("⚠️ No hay datos de test en los horarios requeridos.")
+        return None
+
+    X_test = X_test[features]
+    y_pred = modelo.predict(X_test)
+
+    df_test["N_arribos_predichos"] = y_pred
+    df_pred_final = df_test[["id_estacion_origen", "fecha_intervalo", "N_arribos_predichos"]]
+
+    # Guardar archivo de predicciones
+    nombre_csv_preds = f"Batalla_Salim_{nombre_modelo}_delta{delta_min}_predictions.csv"
+    df_pred_final.to_csv(nombre_csv_preds, index=False)
+    print(f"✅ Predicciones guardadas en {nombre_csv_preds}")
+
+    # Si hay valores reales, guardar métricas
+    if "N_arribos_intervalo" in df_test.columns:
+        mae = mean_absolute_error(df_test["N_arribos_intervalo"], df_test["N_arribos_predichos"])
+        r2 = r2_score(df_test["N_arribos_intervalo"], df_test["N_arribos_predichos"])
+        
+        df_metrics = pd.DataFrame({
+            "modelo": [nombre_modelo],
+            "delta_min": [delta_min],
+            "MAE": [mae],
+            "R2": [r2]
+        })
+        nombre_csv_metrics = "Batalla_Salim_test_metrics.csv"
+        df_metrics.to_csv(nombre_csv_metrics, index=False)
+        print(f"✅ Métricas guardadas en {nombre_csv_metrics}")
+
+    return df_pred_final

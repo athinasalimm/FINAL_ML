@@ -1,0 +1,2 @@
+modelo,delta_min,MAE,R2
+XGBoost_sin_lags,30min,1.9911831843048935,0.5384404320270033
